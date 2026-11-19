@@ -1,0 +1,51 @@
+name: Windows App
+
+on:
+  push:
+    branches:
+      - v0/fix-android-workflow
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '12.3.4'
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run tests
+        run: pnpm test
+      - name: Build web app
+        run: pnpm build
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile --lockfile-dir .
+      - name: Build installer and portable exe
+        working-directory: desktop
+        run: pnpm dist
+      - name: Read app version
+        id: version
+        shell: bash
+        run: echo "value=$(sed -n "s/.*APP_VERSION = '\([^']*\)'.*/\1/p" lib/about.ts)" >> "$GITHUB_OUTPUT"
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-${{ steps.version.outputs.value }}-windows-setup
+          path: desktop/dist/Vault-Setup-*.exe
+          if-no-files-found: error
+      - name: Upload portable exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-${{ steps.version.outputs.value }}-windows-portable
+          path: desktop/dist/Vault-Portable-*.exe
+          if-no-files-found: error

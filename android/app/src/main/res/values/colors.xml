@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches capacitor.config.ts backgroundColor so launch, splash and WebView share one surface. -->
+    <color name="app_background">#151719</color>
+    <color name="colorPrimary">#8fb2ff</color>
+    <color name="colorPrimaryDark">#151719</color>
+    <color name="colorAccent">#8fb2ff</color>
+</resources>

@@ -1,0 +1,58 @@
+{
+  "name": "vault-desktop",
+  "productName": "Vault",
+  "version": "0.0.0",
+  "description": "Private, offline password vault for Windows",
+  "author": "Just_Dream",
+  "license": "GPL-3.0-only",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "prepare:renderer": "node scripts/prepare.mjs",
+    "start": "node scripts/prepare.mjs && electron .",
+    "dist": "node scripts/dist.mjs"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "app.privatevault.desktop",
+    "productName": "Vault",
+    "copyright": "Copyright © 2026 Just_Dream",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "security.cjs",
+      "renderer/**"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "Vault-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Vault-Portable-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Vault",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "include": "uninstall.nsh",
+      "artifactName": "Vault-Setup-${version}.${ext}"
+    }
+  }
+}

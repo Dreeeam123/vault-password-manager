@@ -1,0 +1,8 @@
+packages:
+  - '.'
+
+allowBuilds:
+  electron: true
+  esbuild: true
+  # Only NSIS and portable targets are built; Squirrel tooling is unused.
+  electron-winstaller: false

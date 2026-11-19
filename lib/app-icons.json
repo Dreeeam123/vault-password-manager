@@ -1,0 +1,11 @@
+{
+  "classic": { "background": "#8fb2ff", "mark": "#0e1a2f", "alias": "LauncherClassic" },
+  "glass": { "background": "#5fe4d0", "mark": "#062420", "alias": "LauncherGlass" },
+  "gradient": { "background": "#ffb08a", "mark": "#33180b", "alias": "LauncherGradient" },
+  "midnight": { "background": "#b19cff", "mark": "#150b36", "alias": "LauncherMidnight" },
+  "forest": { "background": "#80d49c", "mark": "#062313", "alias": "LauncherForest" },
+  "rose": { "background": "#ffa2ba", "mark": "#330b18", "alias": "LauncherRose" },
+  "mono": { "background": "#f5f5f5", "mark": "#0a0a0a", "alias": "LauncherMono" },
+  "ocean": { "background": "#55d6f6", "mark": "#04202a", "alias": "LauncherOcean" },
+  "amber": { "background": "#ffb757", "mark": "#2b1a04", "alias": "LauncherAmber" }
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="vault_launcher_background">#8fb2ff</color>
+    <color name="vault_launcher_glass_background">#5fe4d0</color>
+    <color name="vault_launcher_gradient_background">#ffb08a</color>
+    <color name="vault_launcher_midnight_background">#b19cff</color>
+    <color name="vault_launcher_forest_background">#80d49c</color>
+    <color name="vault_launcher_rose_background">#ffa2ba</color>
+    <color name="vault_launcher_mono_background">#f5f5f5</color>
+    <color name="vault_launcher_ocean_background">#55d6f6</color>
+    <color name="vault_launcher_amber_background">#ffb757</color>
+</resources>
