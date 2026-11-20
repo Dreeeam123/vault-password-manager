@@ -18,6 +18,8 @@ Fixes are released before details are made public, and reporters are credited un
 - **Encryption:** the complete vault (entries and settings) is encrypted with AES-256-GCM. Every save uses a fresh random 96-bit IV and a 128-bit authentication tag. The format string `Vault:v1:PBKDF2-SHA256:600000:AES-256-GCM` is bound as additional authenticated data.
 - **Key handling:** on Windows and the web the key is a non-extractable Web Crypto key held only in memory and discarded on lock, inactivity or backgrounding. On Android, an optional remembered session wraps the key with an AES-256-GCM key in the Android Keystore (hardware-backed where available); it is never stored next to the ciphertext.
 - **Storage:** only the encrypted envelope, a revision ID and unlock-delay counters are stored locally in IndexedDB. The app makes no network requests at runtime.
+- **No network access:** a Content Security Policy (`connect-src 'self'`) only lets the app load its own bundled files, and the Android app does not request the INTERNET permission, so the system itself blocks outgoing connections.
+- **Device protection:** screenshots and the app switcher preview are blocked (`FLAG_SECURE` on Android, content protection on Windows), Android cloud backups are disabled, and copied secrets are flagged as sensitive so Android 13+ hides them in the clipboard preview.
 - **Backups:** exported backups use the same encrypted format and require the master password that created them.
 
 Implementation: [`lib/crypto.ts`](./lib/crypto.ts), [`lib/session.ts`](./lib/session.ts), [`lib/db.ts`](./lib/db.ts).

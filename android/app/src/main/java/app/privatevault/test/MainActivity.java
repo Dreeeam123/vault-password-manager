@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(BackupFilePlugin.class);
         registerPlugin(AppIconPlugin.class);
         registerPlugin(SessionKeyPlugin.class);
+        registerPlugin(SecureClipboardPlugin.class);
         super.onCreate(savedInstanceState);
     }
 
