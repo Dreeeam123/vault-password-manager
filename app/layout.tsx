@@ -8,6 +8,7 @@ const inter = localFont({
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { LOOK_BOOT_SCRIPT } from '@/lib/look'
+import { contentSecurityPolicy } from '@/lib/csp'
 
 export const metadata: Metadata = {
   title: 'Vault — Your passwords. Yours alone.',
@@ -30,7 +31,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} dark bg-background`} data-appearance="mono" suppressHydrationWarning>
-      <head><script dangerouslySetInnerHTML={{ __html: LOOK_BOOT_SCRIPT }} /></head>
+      <head>
+        <meta httpEquiv="Content-Security-Policy" content={contentSecurityPolicy(process.env.NODE_ENV === 'development')} />
+        <script dangerouslySetInnerHTML={{ __html: LOOK_BOOT_SCRIPT }} />
+      </head>
       <body className="font-sans antialiased">{children}</body>
     </html>
   )

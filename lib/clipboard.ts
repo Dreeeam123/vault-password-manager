@@ -1,9 +1,12 @@
 import { toast } from 'sonner'
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import { Clipboard } from '@capacitor/clipboard'
 
+const SecureClipboard = registerPlugin<{ write(options: { text: string }): Promise<void> }>('SecureClipboard')
+
 async function writeClipboard(value: string) {
-  if (Capacitor.isNativePlatform()) await Clipboard.write({ string: value, label: 'Vault' })
+  if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('SecureClipboard')) await SecureClipboard.write({ text: value })
+  else if (Capacitor.isNativePlatform()) await Clipboard.write({ string: value, label: 'Vault' })
   else await navigator.clipboard.writeText(value)
 }
 
