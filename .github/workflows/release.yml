@@ -72,11 +72,16 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/release-key.p12"
       - name: Verify signature and name the file
+        env:
+          EXPECTED_CERT: f8765771f71d5af21cca864bd79935c1df5e092fa43905a419b1edfaf78e1fe4
         run: |
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
-          APK=$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)
-          test -n "$APK"
-          "$APKSIGNER" verify --print-certs "$APK" | grep -E "Signer #1 certificate (DN|SHA-256)"
+          set -o pipefail
+          ls -l android/app/build/outputs/apk/release
+          APK=$(find android/app/build/outputs/apk/release -name "*.apk" ! -name "*unsigned*" -print -quit)
+          test -n "$APK" || { echo "::error::No signed release APK was built."; exit 1; }
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          "$APKSIGNER" verify --print-certs "$APK" | tee verify.txt
+          grep -qi "SHA-256 digest: $EXPECTED_CERT" verify.txt || { echo "::error::APK is not signed with the VAULT release key."; exit 1; }
           mkdir -p out
           cp "$APK" "out/VAULT-${{ needs.version.outputs.value }}.apk"
       - uses: actions/upload-artifact@v4
