@@ -16,6 +16,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Only the Release workflow provides a key; local and pull request builds stay unsigned.
+    def releaseKeystore = System.getenv("VAULT_KEYSTORE_FILE")
+    signingConfigs {
+        if (releaseKeystore) {
+            release {
+                storeFile file(releaseKeystore)
+                storeType "pkcs12"
+                storePassword System.getenv("VAULT_KEYSTORE_PASSWORD")
+                keyAlias "vault"
+                keyPassword System.getenv("VAULT_KEYSTORE_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         iconProbe {
             initWith debug
@@ -27,6 +40,9 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (releaseKeystore) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

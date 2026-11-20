@@ -1,0 +1,162 @@
+name: Release
+
+# Push a tag like v1.4.4 to build signed Android and Windows files and publish them as a GitHub pre-release.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.check.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match the app version
+        id: check
+        run: |
+          APP=$(sed -n "s/.*APP_VERSION = '\([^']*\)'.*/\1/p" lib/about.ts)
+          ANDROID=$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' android/app/build.gradle)
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$TAG" != "$APP" ] || [ "$TAG" != "$ANDROID" ]; then
+            echo "::error::Tag $TAG does not match lib/about.ts ($APP) and android/app/build.gradle ($ANDROID)."
+            exit 1
+          fi
+          echo "value=$APP" >> "$GITHUB_OUTPUT"
+
+  android:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '12.3.4'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Use preinstalled Android SDK
+        run: |
+          test -d "$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run tests
+        run: pnpm test && pnpm exec tsc --noEmit
+      - name: Export and sync bundled app
+        run: pnpm android:sync
+      - name: Decrypt signing key
+        env:
+          PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          test -f android/release-key.p12.enc || { echo "::error::No signing key. Run the 'Create Android signing key' workflow first."; exit 1; }
+          umask 077
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in android/release-key.p12.enc \
+            -out "$RUNNER_TEMP/release-key.p12" -pass env:PASSWORD
+          echo "VAULT_KEYSTORE_FILE=$RUNNER_TEMP/release-key.p12" >> "$GITHUB_ENV"
+      - name: Build signed release APK
+        working-directory: android
+        env:
+          VAULT_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: sh ./gradlew assembleRelease testDebugUnitTest --no-daemon
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release-key.p12"
+      - name: Verify signature and name the file
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          APK=$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)
+          test -n "$APK"
+          "$APKSIGNER" verify --print-certs "$APK" | grep -E "Signer #1 certificate (DN|SHA-256)"
+          mkdir -p out
+          cp "$APK" "out/VAULT-${{ needs.version.outputs.value }}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '12.3.4'
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run tests
+        run: pnpm test
+      - name: Build web app
+        run: pnpm build
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile --lockfile-dir .
+      - name: Build installer and portable exe
+        working-directory: desktop
+        run: pnpm dist
+      - name: Name the files
+        shell: bash
+        run: |
+          V="${{ needs.version.outputs.value }}"
+          mkdir -p out
+          cp "desktop/dist/Vault-Setup-$V.exe" "out/VAULT-Setup-$V.exe"
+          cp "desktop/dist/Vault-Portable-$V.exe" "out/VAULT-Portable-$V.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: out/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [version, android, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+      - name: Create checksums
+        working-directory: files
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ needs.version.outputs.value }}
+        run: |
+          cat > notes.md <<EOF
+          **Open-source early beta.** VAULT has not been independently audited yet. Keep a second copy of critical passwords somewhere else.
+
+          | File | For |
+          | --- | --- |
+          | \`VAULT-Setup-$V.exe\` | Windows 10/11 (64-bit), installer |
+          | \`VAULT-Portable-$V.exe\` | Windows 10/11 (64-bit), no installation |
+          | \`VAULT-$V.apk\` | Android 7.0 or newer |
+
+          Built by GitHub Actions from this tag. Compare your download with \`SHA256SUMS.txt\`.
+
+          **Windows:** the files are not code-signed yet, so SmartScreen may show "Windows protected your PC". Click "More info", then "Run anyway".
+
+          **Android:** if you installed an earlier test build, export an encrypted backup first, uninstall it, then install this version and restore the backup. Test builds were signed with a different key.
+          EOF
+          gh release create "$GITHUB_REF_NAME" files/* \
+            --repo "$GITHUB_REPOSITORY" --prerelease \
+            --title "VAULT $V (Beta)" --notes-file notes.md
