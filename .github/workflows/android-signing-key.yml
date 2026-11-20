@@ -1,0 +1,55 @@
+name: Create Android signing key
+
+# Run once. Android only installs updates signed with the same key, so this key must never change.
+# The key is generated here and only leaves the runner encrypted with the ANDROID_KEYSTORE_PASSWORD secret.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  create-key:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse to replace an existing key
+        run: |
+          if [ -f android/release-key.p12.enc ]; then
+            echo "::error::A signing key already exists. Replacing it would break updates for every installed app."
+            exit 1
+          fi
+      - name: Check password
+        env:
+          PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ ${#PASSWORD} -lt 24 ]; then
+            echo "::error::The ANDROID_KEYSTORE_PASSWORD secret is missing or shorter than 24 characters."
+            exit 1
+          fi
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Generate and encrypt key
+        env:
+          PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          umask 077
+          KEY="$RUNNER_TEMP/release-key.p12"
+          keytool -genkeypair -keystore "$KEY" -storetype PKCS12 -alias vault \
+            -keyalg RSA -keysize 4096 -validity 10000 \
+            -dname "CN=VAULT, O=Just_Dream, C=DE" \
+            -storepass:env PASSWORD -keypass:env PASSWORD
+          keytool -list -v -keystore "$KEY" -storetype PKCS12 -storepass:env PASSWORD | grep -m 1 "SHA256:" | sed 's/^[[:space:]]*/Signing certificate /'
+          openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in "$KEY" -out release-key.p12.enc -pass env:PASSWORD
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in release-key.p12.enc -pass env:PASSWORD | cmp - "$KEY"
+          rm -f "$KEY"
+      - name: Upload encrypted key
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-key-encrypted
+          path: release-key.p12.enc
+          if-no-files-found: error
+          retention-days: 1
