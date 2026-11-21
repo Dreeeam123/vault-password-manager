@@ -11,6 +11,9 @@ const isProbe = mode === '--icon-probe'
 const dump = (...args) => execFileSync(aapt2, ['dump', ...args], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
 const themes = JSON.parse(await readFile('lib/app-icons.json', 'utf8'))
 const launcherName = theme => theme === 'classic' ? 'vault_launcher' : `vault_launcher_${theme}`
+// Must match the default in lib/app-icon.ts and the enabled alias in AndroidManifest.xml.
+const DEFAULT_THEME = 'mono'
+assert.ok(themes[DEFAULT_THEME], `Default theme ${DEFAULT_THEME} missing from lib/app-icons.json`)
 
 const resources = dump('resources', apk)
 assert.doesNotMatch(resources, /\b(?:drawable|mipmap)\/\$?ic_launcher/, 'Obsolete launcher artwork must not be packaged')
@@ -22,16 +25,16 @@ const resourceId = name => {
 const manifest = dump('xmltree', apk, '--file', 'AndroidManifest.xml')
 const pixels = async input => sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
 
-// Application + MainActivity use the classic icon.
-const classic = resourceId('vault_launcher')
-const classicRound = resourceId('vault_launcher_round')
-for (const [attribute, expected] of [['icon', classic], ['roundIcon', classicRound]]) {
+// Application + MainActivity use the default theme's icon.
+const defaultIcon = resourceId(launcherName(DEFAULT_THEME))
+const defaultRound = resourceId(`${launcherName(DEFAULT_THEME)}_round`)
+for (const [attribute, expected] of [['icon', defaultIcon], ['roundIcon', defaultRound]]) {
   const refs = [...manifest.matchAll(new RegExp(`android:${attribute}\\([^)]*\\)=@(0x[0-9a-f]+)`, 'g'))].map(match => match[1])
   assert.ok(refs.length >= 2 + Object.keys(themes).length, `Application, activity and every alias must set ${attribute}`)
-  assert.equal(refs.filter(ref => ref === expected).length, 3, `Application, activity and the classic alias must use the classic ${attribute}`)
+  assert.equal(refs.filter(ref => ref === expected).length, 3, `Application, activity and the ${DEFAULT_THEME} alias must use the ${DEFAULT_THEME} ${attribute}`)
 }
 
-// Exactly one launcher alias per theme; only classic enabled by default.
+// Exactly one launcher alias per theme; only the default theme is enabled after install.
 const aliasBlocks = manifest.split(/\n(?=\s+E: activity-alias)/).filter(block => /E: activity-alias/.test(block))
 assert.equal(aliasBlocks.length, Object.keys(themes).length, 'One activity-alias per theme')
 assert.doesNotMatch(manifest.split(/\n(?=\s+E: activity-alias)/)[0].match(/E: activity \(.*?(?=\n\s{4}E: |$)/s)?.[0] ?? '', /android\.intent\.category\.LAUNCHER/, 'MainActivity itself must not be a launcher entry')
@@ -52,7 +55,7 @@ for (const [theme, palette] of Object.entries(themes)) {
   const enabledRaw = block.match(/android:enabled\([^)]*\)=(?:\(type 0x12\))?(true|false|0x[0-9a-f]+)/)?.[1]
   assert.ok(enabledRaw, `${palette.alias} must declare android:enabled explicitly`)
   const enabled = enabledRaw === 'true' || (enabledRaw !== 'false' && enabledRaw !== '0x0')
-  assert.equal(enabled, theme === 'classic', `${palette.alias} enabled state must be ${theme === 'classic'}`)
+  assert.equal(enabled, theme === DEFAULT_THEME, `${palette.alias} enabled state must be ${theme === DEFAULT_THEME}`)
   for (const xmlName of [name, `${name}_round`]) {
     const xml = dump('xmltree', apk, '--file', `res/mipmap-anydpi-v26/${xmlName}.xml`)
     for (const layer of ['foreground', 'monochrome']) {
@@ -80,7 +83,7 @@ assert.equal(badging.match(/application-label:'([^']+)'/)?.[1], expectedLabel, '
 // and prints no launchable-activity line (or an empty label), so it is only cross-checked when present.
 const launchable = badging.match(/^launchable-activity:.*$/m)?.[0]
 if (launchable) {
-  assert.match(launchable, /name='[^']*\.LauncherClassic'/, `Launcher must be the Classic alias, got: ${launchable}`)
+  assert.match(launchable, new RegExp(`name='[^']*\\.${themes[DEFAULT_THEME].alias}'`), `Launcher must be the ${themes[DEFAULT_THEME].alias} alias, got: ${launchable}`)
   const launchableLabel = launchable.match(/label='([^']*)'/)?.[1]
   if (launchableLabel) assert.equal(launchableLabel, expectedLabel, `Wrong launcher label: ${launchable}`)
 }
