@@ -14,7 +14,7 @@ await writeFile(join(brands, 'catalog.json'), JSON.stringify(catalog.map(icon =>
 await writeFile(join(brands, 'catalog.svg'), `<svg xmlns="http://www.w3.org/2000/svg">${catalog.map(icon => `<symbol id="${icon.slug}" viewBox="0 0 24 24"><path fill="currentColor" d="${icon.path}"/></symbol>`).join('')}</svg>`)
 
 // One launcher icon per theme: fingerprint mark on the theme's accent. "classic" keeps the
-// plain vault_launcher name so the default manifest entries stay unchanged.
+// plain vault_launcher name for older installs; "mono" is the default after install.
 const themes = JSON.parse(await readFile(join(root, 'lib', 'app-icons.json'), 'utf8'))
 const marks = new Map()
 function fingerprint(color) {
@@ -48,5 +48,5 @@ for (const [theme, palette] of Object.entries(themes)) {
   await writeFile(join(previews, `${theme}.png`), await appIcon(96, palette))
 }
 await writeFile(join(root, 'android/app/src/main/res/values/ic_launcher_background.xml'), `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n${Object.entries(themes).map(([theme, palette]) => `    <color name="${launcherName(theme)}_background">${palette.background}</color>`).join('\n')}\n</resources>\n`)
-await writeFile(join(root, 'public', 'vault-app-icon.png'), await appIcon(512, themes.classic))
+await writeFile(join(root, 'public', 'vault-app-icon.png'), await appIcon(512, themes.mono))
 console.log(`Generated ${catalog.length} offline brand icons and ${Object.keys(themes).length} Android launcher icon sets.`)
