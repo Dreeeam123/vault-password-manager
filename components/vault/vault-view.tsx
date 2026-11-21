@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import { ArrowDownToLine, ArrowUpRight, ChevronLeft, ChevronRight, KeyRound, Plus, Search, ShieldCheck, Star, X } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpRight, ChevronLeft, ChevronRight, KeyRound, Plus, Search, ShieldCheck, Star, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -13,6 +13,7 @@ import type { VaultController } from '@/hooks/use-vault'
 import { cn } from '@/lib/utils'
 import { VaultSelect } from './vault-select'
 import { LoginList } from './login-list'
+import { TrashDialog } from './trash-dialog'
 
 const initialFilters: LoginFilters = { query: '', favorites: false, category: 'all', tag: 'all', sort: 'title' }
 
@@ -20,7 +21,9 @@ export function VaultView({ vault, onAdd, onEdit, onHealth }: { vault: VaultCont
   const [filters, setFilters] = useState<LoginFilters>(initialFilters)
   const [page, setPage] = useState(0)
   const toolbar = useRef<HTMLDivElement>(null)
+  const [trashOpen, setTrashOpen] = useState(false)
   const entries = vault.data!.entries
+  const trashCount = vault.data!.trash.length
   const visible = useMemo(() => selectLogins(entries, filters), [entries, filters])
   const current = loginPage(visible, page)
   const favorites = entries.filter(entry => entry.favorite).length
@@ -82,6 +85,9 @@ export function VaultView({ vault, onAdd, onEdit, onHealth }: { vault: VaultCont
       <span className="text-sm tabular-nums text-muted-foreground">{current.page + 1} / {current.totalPages}</span>
       <Button variant="outline" size="sm" disabled={current.page + 1 === current.totalPages} onClick={() => turnPage(current.page + 1)}>Next<ChevronRight data-icon="inline-end" /></Button>
     </nav>}
+
+    {trashCount > 0 && <button type="button" onClick={() => setTrashOpen(true)} className="flex min-h-11 items-center gap-2 self-start text-sm text-muted-foreground hover:text-primary"><Trash2 className="size-4" aria-hidden="true" /><span>Trash</span><span className="tabular-nums">{trashCount}</span><ChevronRight className="size-4" aria-hidden="true" /></button>}
+    {trashOpen && <TrashDialog vault={vault} onClose={() => setTrashOpen(false)} />}
 
     {backupIsStale(vault.data!) && <aside aria-label="Backup reminder" className="panel flex items-center justify-between gap-4 rounded-xl p-4">
       <div className="flex min-w-0 items-start gap-3"><ArrowDownToLine className="mt-0.5 hidden size-5 shrink-0 text-primary sm:block" /><div><p className="text-sm font-medium">{vault.data!.settings.lastBackupAt ? 'Keep your backup up to date' : 'Keep a safe copy'}</p><p className="text-sm leading-relaxed text-muted-foreground">Save it outside this device. Keep your master password.</p></div></div>

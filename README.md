@@ -2,7 +2,8 @@
 
 A free, fully local password manager for Windows and Android, built with Next.js static export, IndexedDB (`idb`), and Web Crypto. No backend, account, cloud sync, analytics, remote fonts, or runtime external requests.
 
-Website: [tryvault.download](https://tryvault.download)
+Website: [tryvault.download](https://tryvault.download)  
+Support: [support@tryvault.download](mailto:support@tryvault.download)
 
 > **Status: not independently audited.** VAULT uses well-established primitives (PBKDF2-SHA256 + AES-256-GCM via Web Crypto), but no outside firm has reviewed this code yet. The source is published so anyone can check it. Read [SECURITY.md](./SECURITY.md) and the security model below before trusting it with important data. Reviews and issue reports are very welcome.
 
