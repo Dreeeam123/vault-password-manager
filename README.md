@@ -6,6 +6,50 @@ Website: [tryvault.download](https://tryvault.download)
 
 > **Status: not independently audited.** VAULT uses well-established primitives (PBKDF2-SHA256 + AES-256-GCM via Web Crypto), but no outside firm has reviewed this code yet. The source is published so anyone can check it. Read [SECURITY.md](./SECURITY.md) and the security model below before trusting it with important data. Reviews and issue reports are very welcome.
 
+<p align="center">
+  <img src="docs/screenshots/windows/vault.png" alt="VAULT on Windows showing the vault with saved logins" width="860">
+</p>
+
+## Features
+
+- **Big brand icons** – thousands of real brand logos are bundled in the app (via Simple Icons), so every login is recognizable at a glance. Searching for an icon never goes online.
+- **Fingerprint unlock (Android)** – unlock with a touch; the session key is wrapped by the Android Keystore.
+- **Autofill (Android)** – VAULT suggests the matching login when an app asks for one, so there is no copy and paste.
+- **Encrypted backups** – export a password-protected `.vault` file and restore it on any device.
+- **100% local** – no account, no cloud sync, no server, no analytics. Your vault stays encrypted on your device and works fully offline.
+- **Open source** – the complete source is public under GPL-3.0, so anyone can review it.
+- **Nine themes** – Classic, Liquid Glass, Gradient, Midnight, Ocean, Forest, Rose, Amber and Mono, each with a matching app icon.
+- **Light and dark mode** – every theme has a light and a dark variant.
+- **Password generator** – random passwords or passphrases from cryptographically secure randomness.
+- **Password health** – a private, offline score that flags weak, reused and older passwords.
+- **Windows and Android** – the same app on your PC and your phone.
+
+## Screenshots
+
+### Android
+
+| Unlock | Vault | Fingerprint | Autofill |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/android/unlock.png" alt="Unlock screen" width="200"> | <img src="docs/screenshots/android/vault.png" alt="Vault with saved logins" width="200"> | <img src="docs/screenshots/android/fingerprint.png" alt="Fingerprint unlock" width="200"> | <img src="docs/screenshots/android/autofill.png" alt="Autofill login picker" width="200"> |
+| **Brand icons** | **Generator** | **Health** | **Backups** |
+| <img src="docs/screenshots/android/brand-icons.png" alt="Brand icon picker" width="200"> | <img src="docs/screenshots/android/generator.png" alt="Password generator" width="200"> | <img src="docs/screenshots/android/health.png" alt="Password health score" width="200"> | <img src="docs/screenshots/android/backup.png" alt="Encrypted backups in settings" width="200"> |
+
+### Windows
+
+| Unlock | Brand icons |
+| :---: | :---: |
+| <img src="docs/screenshots/windows/unlock.png" alt="Unlock screen on Windows" width="420"> | <img src="docs/screenshots/windows/brand-icons.png" alt="Brand icon picker on Windows" width="420"> |
+| **Generator** | **Health** |
+| <img src="docs/screenshots/windows/generator.png" alt="Password generator on Windows" width="420"> | <img src="docs/screenshots/windows/health.png" alt="Password health on Windows" width="420"> |
+| **Themes and backups** | **Vault** |
+| <img src="docs/screenshots/windows/settings-themes.png" alt="Settings with themes and backups on Windows" width="420"> | <img src="docs/screenshots/windows/vault.png" alt="Vault on Windows" width="420"> |
+
+### Themes
+
+Classic · Liquid Glass · Gradient · Midnight · Ocean · Forest · Rose · Amber · Mono
+
+<img src="docs/screenshots/themes.png" alt="The nine VAULT themes side by side" width="100%">
+
 ## Where to look
 
 | What | File |
