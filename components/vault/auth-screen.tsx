@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import useSWR from 'swr'
+import { BIOMETRIC_KEY, biometricCancelled, biometricStatus } from '@/lib/biometric'
 import { ArrowRight, ArrowUpRight, Check, Fingerprint, HardDrive, KeyRound, LockKeyhole, ShieldCheck, Upload, WifiOff } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -17,6 +19,24 @@ export function AuthScreen({ vault, onImport }: { vault: VaultController; onImpo
   const [error, setError] = useState('')
   const [understood, setUnderstood] = useState(false)
   const returning = vault.hasVault
+  const { data: biometric, mutate: refreshBiometric } = useSWR(returning ? BIOMETRIC_KEY : null, biometricStatus, { revalidateOnFocus: false, revalidateOnReconnect: false })
+  const fingerprint = returning && biometric?.enabled
+  async function unlockWithFingerprint() {
+    setError('')
+    try { await vault.unlockBiometric() }
+    catch (error) { if (!biometricCancelled(error)) { setError(messageOf(error)); void refreshBiometric() } }
+  }
+  // Offer the fingerprint prompt once per lock screen: on app start, or when the user comes back.
+  // Not right after pressing "Lock vault", which would undo the lock they just asked for.
+  const prompted = useRef(false)
+  useEffect(() => {
+    if (!fingerprint || prompted.current) return
+    const ask = () => { if (document.hidden || prompted.current) return; prompted.current = true; void unlockWithFingerprint() }
+    if (vault.lockVersion === 0) ask()
+    document.addEventListener('visibilitychange', ask)
+    return () => document.removeEventListener('visibilitychange', ask)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fingerprint])
   return <motion.div initial={{ opacity: .35, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18, ease: [.2, .7, .3, 1] }} className="flex flex-col gap-8 lg:gap-10">
     <div className="flex flex-col gap-3"><div className="flex items-center gap-2 text-sm text-primary"><span className="size-1.5 rounded-full bg-primary" />YOUR PRIVATE CORNER OF THE INTERNET</div>
       <h1 className="text-balance text-4xl font-semibold leading-[1.15] tracking-[-0.055em] lg:text-5xl">Your passwords.<br /><span className="text-muted-foreground">Yours alone.</span></h1>
@@ -38,6 +58,7 @@ export function AuthScreen({ vault, onImport }: { vault: VaultController; onImpo
           {!returning && <label className="flex cursor-pointer items-start gap-3 text-sm leading-relaxed text-muted-foreground"><input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary" checked={understood} onChange={event => setUnderstood(event.target.checked)} required /><span>I understand my master password <span className="text-foreground">cannot be recovered</span>. If I lose it, I lose access to my vault.</span></label>}
           {error && <Alert><AlertDescription role="alert">{error}</AlertDescription></Alert>}
           <Button type="submit" size="lg" className="w-full" disabled={vault.busy || (!returning && !understood)}>{vault.busy ? 'Securing your vault…' : returning ? 'Unlock your vault' : 'Create your vault'}<ArrowRight data-icon="inline-end" /></Button>
+          {fingerprint && <Button type="button" variant="outline" size="lg" className="w-full" disabled={vault.busy} onClick={() => void unlockWithFingerprint()}><Fingerprint data-icon="inline-start" />Unlock with fingerprint</Button>}
           <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground"><LockKeyhole className="size-3.5" />Encrypted before it ever touches your device.</p>
         </form>
       </section>

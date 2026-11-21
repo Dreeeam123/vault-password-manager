@@ -17,6 +17,7 @@ import { TagInput } from './tag-input'
 import { generatePassword } from '@/lib/generator'
 import { copySecret } from '@/lib/clipboard'
 import { allTags, CATEGORIES, entrySchema, messageOf, withPasswordHistory, type Entry } from '@/lib/types'
+import { TRASH_DAYS } from '@/lib/trash'
 import type { VaultController } from '@/hooks/use-vault'
 
 const FIELD_LABELS = { title: 'Title', username: 'Username', password: 'Password', url: 'Website', notes: 'Notes', category: 'Category', icon: 'Icon', tags: 'Tags', favorite: 'Favorite' } as const
@@ -30,7 +31,6 @@ export function EntryDialog({ entry, onClose, vault, initialPassword = '' }: { e
   const [form, setForm] = useState<Entry>(() => entry ?? { id: crypto.randomUUID(), title: '', username: '', password: initialPassword, url: '', notes: '', category: 'Personal' as const, tags: [], favorite: false, createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(), passwordChangedAt: new Date().toISOString() })
   const [error, setError] = useState('')
   const existingTags = useMemo(() => allTags(vault.data?.entries ?? []), [vault.data?.entries])
-  const [deleting, setDeleting] = useState(false)
   // An existing password stays read-only until the user explicitly chooses to change it.
   const [passwordLocked, setPasswordLocked] = useState(Boolean(entry?.password))
   const [confirmEmpty, setConfirmEmpty] = useState(false)
@@ -43,6 +43,14 @@ export function EntryDialog({ entry, onClose, vault, initialPassword = '' }: { e
   function setPassword(password: string) { patch('password', password); setConfirmEmpty(false) }
   function restorePassword() { if (entry) { setPassword(entry.password); setPasswordLocked(Boolean(entry.password)) } }
   function unlockPassword() { setPasswordLocked(false); requestAnimationFrame(() => document.getElementById('entry-password')?.focus()) }
+  async function moveToTrash() {
+    if (!entry) return
+    try {
+      await vault.deleteEntry(entry.id)
+      toast.success(`Moved to trash. Recoverable for ${TRASH_DAYS} days.`, { action: { label: 'Undo', onClick: () => { vault.restoreEntry(entry.id).then(() => toast.success('Login restored.'), error => toast.error(messageOf(error))) } } })
+      onClose()
+    } catch (error) { setError(messageOf(error)) }
+  }
 
   return <Dialog open onOpenChange={value => { if (!value && !vault.busy) onClose() }}><DialogContent className="sm:max-w-xl">
     <DialogHeader><DialogTitle>{entry ? 'Edit login' : 'New login'}</DialogTitle><DialogDescription>{entry ? 'The password stays locked until you choose to change it. Changes are encrypted on save.' : 'Add the details. Vault takes care of keeping them private.'}</DialogDescription></DialogHeader>
@@ -89,11 +97,9 @@ export function EntryDialog({ entry, onClose, vault, initialPassword = '' }: { e
       {error && <p role="alert" className="text-sm">{error}</p>}
       {confirmEmpty && entry
         ? <div role="alert" className="rounded-xl border border-destructive/50 bg-background p-4"><p className="mb-3 flex items-start gap-2 text-sm"><TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />You removed the password of this login. Save it without a password?</p><div className="flex flex-wrap gap-2"><Button type="button" onClick={restorePassword}>Restore password</Button><Button type="submit" variant="destructive" disabled={vault.busy}>Save without password</Button></div></div>
-        : deleting
-          ? <div className="rounded-xl border border-border bg-background p-4"><p className="mb-3 text-sm">Permanently delete this login? This cannot be undone.</p><div className="flex gap-2"><Button type="button" variant="destructive" disabled={vault.busy} onClick={async () => { try { await vault.deleteEntry(form.id); toast.success('Login deleted.'); onClose() } catch (error) { setError(messageOf(error)) } }}>Delete permanently</Button><Button type="button" variant="outline" onClick={() => setDeleting(false)}>Keep login</Button></div></div>
-          : <div className="flex flex-col gap-3">
+        : <div className="flex flex-col gap-3">
             {entry && <p className="text-sm text-muted-foreground" aria-live="polite">{unchanged ? 'No changes yet.' : <>Will save: <span className="font-medium text-foreground">{changes.join(', ')}</span></>}</p>}
-            <div className="flex items-center justify-between"><div>{entry && <Button type="button" variant="ghost" size="icon" aria-label="Delete login" onClick={() => setDeleting(true)}><Trash2 /></Button>}</div><div className="flex gap-2"><Button type="button" variant="outline" onClick={onClose} disabled={vault.busy}>Cancel</Button><Button type="submit" disabled={vault.busy || unchanged}><Save data-icon="inline-start" />{vault.busy ? 'Encrypting…' : entry ? 'Save changes' : 'Save login'}</Button></div></div>
+            <div className="flex items-center justify-between"><div>{entry && <Button type="button" variant="ghost" size="icon" aria-label="Move login to trash" disabled={vault.busy} onClick={moveToTrash}><Trash2 /></Button>}</div><div className="flex gap-2"><Button type="button" variant="outline" onClick={onClose} disabled={vault.busy}>Cancel</Button><Button type="submit" disabled={vault.busy || unchanged}><Save data-icon="inline-start" />{vault.busy ? 'Encrypting…' : entry ? 'Save changes' : 'Save login'}</Button></div></div>
           </div>}
     </form>
   </DialogContent></Dialog>
