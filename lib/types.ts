@@ -15,7 +15,15 @@ export const entrySchema = z.object({
   createdAt: z.string().datetime(),
   modifiedAt: z.string().datetime(),
   passwordChangedAt: z.string().datetime(),
+  passwordHistory: z.array(z.object({ password: z.string().max(4096), replacedAt: z.string().datetime() })).max(10).optional(),
 })
+export const PASSWORD_HISTORY_LIMIT = 10
+/** Keeps the replaced password so an accidental change can always be undone. Newest first. */
+export function withPasswordHistory(previous: Entry | undefined, next: Entry, now: string): Entry {
+  if (!previous?.password || previous.password === next.password) return next
+  const history = [{ password: previous.password, replacedAt: now }, ...(previous.passwordHistory ?? []).filter(item => item.password !== next.password)]
+  return { ...next, passwordHistory: history.slice(0, PASSWORD_HISTORY_LIMIT) }
+}
 export const APPEARANCES = ['classic', 'glass', 'gradient', 'midnight', 'forest', 'rose', 'mono', 'ocean', 'amber'] as const
 export const AUTO_LOCK_OPTIONS = [1, 5, 15, 0] as const
 export const CLIPBOARD_OPTIONS = [15, 30, 60, 0] as const
