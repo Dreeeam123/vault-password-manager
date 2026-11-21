@@ -24,7 +24,7 @@ public class AppIconPlugin extends Plugin {
         "LauncherClassic", "LauncherGlass", "LauncherGradient", "LauncherMidnight", "LauncherForest",
         "LauncherRose", "LauncherMono", "LauncherOcean", "LauncherAmber"
     };
-    static final String DEFAULT_ALIAS = "LauncherClassic";
+    static final String DEFAULT_ALIAS = "LauncherMono";
     private static final String PREFS = "launcher_icon";
     private static final String PENDING = "pending_alias";
 

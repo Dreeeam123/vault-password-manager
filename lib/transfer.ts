@@ -32,7 +32,7 @@ export function serializeTextExport(input: VaultData): string {
   const data = vaultSchema.parse(input)
   const lines = ['VAULT TEXT EXPORT — NOT IMPORTABLE', 'UNENCRYPTED: anyone with this file can read every password.', `Exported: ${new Date().toISOString()}`, `Entries: ${data.entries.length}`, '']
   for (const entry of data.entries) {
-    lines.push('────────────────────────', `Title: ${entry.title}`, `Username: ${entry.username}`, `Password: ${entry.password}`, `Website: ${entry.url}`, `Category: ${entry.category}`, `Tags: ${entry.tags.join(', ')}`, `Favorite: ${entry.favorite ? 'Yes' : 'No'}`, `Created: ${entry.createdAt}`, `Modified: ${entry.modifiedAt}`, `Password changed: ${entry.passwordChangedAt}`, `Notes:\n${entry.notes}`, '')
+    lines.push('────────────────────────', `Title: ${entry.title}`, `Username: ${entry.username}`, `Password: ${entry.password}`, `Website: ${entry.url}`, `Category: ${entry.category}`, `Tags: ${entry.tags.join(', ')}`, `Favorite: ${entry.favorite ? 'Yes' : 'No'}`, `Created: ${entry.createdAt}`, `Modified: ${entry.modifiedAt}`, `Password changed: ${entry.passwordChangedAt}`, ...(entry.passwordHistory ?? []).map(item => `Previous password (replaced ${item.replacedAt}): ${item.password}`), `Notes:\n${entry.notes}`, '')
   }
   return lines.join('\n')
 }

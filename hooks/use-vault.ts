@@ -15,6 +15,8 @@ import { syncAppIcon } from '@/lib/app-icon'
 import { forgetSession, loadSession, rememberSession, touchSession } from '@/lib/session'
 import { applySystemBars, hapticError, hapticImpact, hapticSuccess } from '@/lib/native'
 import { parseImportBackup } from '@/lib/transfer'
+import { deleteForever as purgeOne, emptyTrash as purgeAll, moveToTrash, purgeExpired, restoreFromTrash } from '@/lib/trash'
+import { BIOMETRIC_KEY, disableBiometric, enableBiometric, unlockWithBiometric } from '@/lib/biometric'
 
 type Session = { key: CryptoKey; record: VaultRecord; data: VaultData }
 type Look = Pick<Settings, 'theme' | 'appearance'>
@@ -247,35 +249,57 @@ export function useVault() {
       const envelope = await encryptVault(initial, key, salt)
       assertActive(generation)
       const record = await commitRecord(envelope, null)
+      await resetBiometric()
       await accept({ key, data: initial, record }, generation)
       void navigator.storage?.persist?.().catch(() => false)
     })
   }
   async function unlock(password: string) {
     return run(async generation => {
-      let record = await getRecord()
+      const record = await getRecord()
       if (!record) { await mutate(); throw new Error('No local vault found. Create or restore one.') }
-      const decoded = await authenticate(password, record)
-      assertActive(generation)
-      const receipt = pendingBackup.current
-      if (receipt?.revision === record.revision) {
-        decoded.data.settings.lastBackupAt = receipt.at
-        const envelope = await encryptVault(decoded.data, decoded.key, record.envelope.salt)
-        assertActive(generation)
-        record = await commitRecord(envelope, record.revision)
-      }
-      pendingBackup.current = null
-      assertActive(generation)
-      session.current = { ...decoded, record }; setData(decoded.data)
-      await mutate(record, false)
-      void remember()
+      await open(await authenticate(password, record), record, generation)
     })
+  }
+  async function unlockBiometric() {
+    return run(async generation => {
+      const record = await getRecord()
+      if (!record) { await mutate(); throw new Error('No local vault found. Create or restore one.') }
+      // The system prompt can briefly background the app; that must not count as leaving it.
+      const resume = pauseLock()
+      let key: CryptoKey
+      try { key = await unlockWithBiometric() } finally { resume() }
+      let data: VaultData
+      try { data = await decryptVault(record.envelope, key) }
+      catch {
+        await disableBiometric(); void mutateCache(BIOMETRIC_KEY)
+        throw new Error('Fingerprint unlock was turned off because the vault key changed. Use your master password and turn it on again in Settings.')
+      }
+      void hapticSuccess()
+      await open({ key, data }, record, generation)
+    })
+  }
+  async function open(decoded: { key: CryptoKey; data: VaultData }, initial: VaultRecord, generation: number) {
+    let record = initial
+    assertActive(generation)
+    const receipt = pendingBackup.current
+    if (receipt?.revision === record.revision) {
+      decoded.data.settings.lastBackupAt = receipt.at
+      const envelope = await encryptVault(decoded.data, decoded.key, record.envelope.salt)
+      assertActive(generation)
+      record = await commitRecord(envelope, record.revision)
+    }
+    pendingBackup.current = null
+    assertActive(generation)
+    session.current = { ...decoded, record }; setData(decoded.data)
+    await mutate(record, false)
+    void remember()
   }
   async function update(transform: (current: VaultData) => VaultData, quiet = false) {
     return run(async generation => {
       const active = session.current
       if (!active) throw new Error('Unlock your vault first.')
-      const nextData = transform(active.data)
+      const nextData = purgeExpired(transform(active.data))
       const envelope = await encryptVault(nextData, active.key, active.record.envelope.salt)
       assertActive(generation)
       const record = await commitRecord(envelope, active.record.revision)
@@ -307,8 +331,24 @@ export function useVault() {
     })()
   }
   const saveEntry = (entry: Entry) => update(current => ({ ...current, entries: current.entries.some(e => e.id === entry.id) ? current.entries.map(e => e.id === entry.id ? entry : e) : [...current.entries, entry] }))
-  const deleteEntry = (id: string) => update(current => ({ ...current, entries: current.entries.filter(entry => entry.id !== id) }))
+  const deleteEntry = (id: string) => update(current => moveToTrash(current, id))
+  const restoreEntry = (id: string) => update(current => restoreFromTrash(current, id))
+  const deleteForever = (id: string) => update(current => purgeOne(current, id))
+  const emptyTrash = () => update(purgeAll)
   const setSettings = (settings: Settings) => update(current => ({ ...current, settings }))
+  async function setBiometric(enabled: boolean) {
+    await run(async generation => {
+      const active = session.current
+      if (!active) throw new Error('Unlock your vault first.')
+      if (!enabled) { await disableBiometric(); return }
+      const resume = pauseLock()
+      try { await enableBiometric(active.key) } finally { resume() }
+      assertActive(generation)
+    })
+    await mutateCache(BIOMETRIC_KEY)
+  }
+  // A new key (new master password or a restored vault) cannot be opened by the old fingerprint key.
+  const resetBiometric = () => disableBiometric().then(() => mutateCache(BIOMETRIC_KEY))
   async function changePassword(currentPassword: string, nextPassword: string) {
     return run(async generation => {
       const active = session.current
@@ -319,6 +359,7 @@ export function useVault() {
       const envelope = await encryptVault(active.data, key, salt)
       assertActive(generation)
       const record = await commitRecord(envelope, active.record.revision)
+      await resetBiometric()
       await accept({ key, data: active.data, record }, generation)
     })
   }
@@ -336,6 +377,7 @@ export function useVault() {
       const fresh = await encryptVault(decoded.data, decoded.key, salt)
       assertActive(generation)
       const record = await commitRecord(fresh, previous?.revision ?? null)
+      await resetBiometric()
       await accept({ ...decoded, record }, generation)
     })
   }
@@ -382,11 +424,12 @@ export function useVault() {
       const active = session.current
       if (!active) throw new Error('Unlock your vault first.')
       await wipeRecord(active.record.revision)
+      await resetBiometric()
       await mutateCache(LOOK_KEY, undefined, false)
       lock(); await mutate(undefined, false); channel.current?.postMessage('changed')
       toast.success('Local vault erased.')
     })
   }
-  return { data: view, busy, lockVersion, isLoading: isLoading || (restoring && !storageError), storageError, hasVault: Boolean(stored), create, unlock, lock: () => lock(), pauseLock, saveEntry, deleteEntry, setSettings, setLook, changePassword, verifyPassword, restore, exportBackup, wipe }
+  return { data: view, busy, lockVersion, isLoading: isLoading || (restoring && !storageError), storageError, hasVault: Boolean(stored), create, unlock, unlockBiometric, setBiometric, lock: () => lock(), pauseLock, saveEntry, deleteEntry, restoreEntry, deleteForever, emptyTrash, setSettings, setLook, changePassword, verifyPassword, restore, exportBackup, wipe }
 }
 export type VaultController = ReturnType<typeof useVault>

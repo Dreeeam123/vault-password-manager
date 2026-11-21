@@ -9,8 +9,8 @@ type AppIconPlugin = {
 
 const AppIcon = registerPlugin<AppIconPlugin>('AppIcon')
 export const APP_ICONS = palette as Record<Appearance, { background: string; mark: string; alias: string }>
-export const launcherAliasFor = (appearance: Appearance) => APP_ICONS[appearance]?.alias ?? APP_ICONS.classic.alias
-export const appIconPreview = (appearance: Appearance) => `/app-icons/${appearance in APP_ICONS ? appearance : 'classic'}.png`
+export const launcherAliasFor = (appearance: Appearance) => APP_ICONS[appearance]?.alias ?? APP_ICONS.mono.alias
+export const appIconPreview = (appearance: Appearance) => `/app-icons/${appearance in APP_ICONS ? appearance : 'mono'}.png`
 
 /**
  * Keeps the Android home-screen icon in sync with the theme. No-op on the web.
