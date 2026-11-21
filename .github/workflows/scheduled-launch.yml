@@ -1,0 +1,39 @@
+name: Scheduled launch
+
+# Publishes the draft release when the launch countdown on tryvault.download ends.
+# The website checks GitHub every 30 seconds after the countdown and switches to
+# real downloads as soon as this release is published.
+# GitHub can start scheduled runs a few minutes late, so it retries every 5 minutes.
+on:
+  schedule:
+    - cron: '*/5 17-19 27 11 *' # 27 November, 18:00-20:55 German time (CET = UTC+1)
+  workflow_dispatch:
+
+env:
+  LAUNCH_TAG: v1.4.5
+  LAUNCH_AT: '2026-11-27T17:00:00Z'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ] && [ "$(date -u +%s)" -lt "$(date -u -d "$LAUNCH_AT" +%s)" ]; then
+            echo "Not launch time yet."
+            exit 0
+          fi
+          DRAFT=$(gh release view "$LAUNCH_TAG" --repo "$REPO" --json isDraft --jq .isDraft 2>/dev/null || echo missing)
+          case "$DRAFT" in
+            true)
+              gh release edit "$LAUNCH_TAG" --repo "$REPO" --draft=false
+              echo "Published $LAUNCH_TAG." ;;
+            false) echo "$LAUNCH_TAG is already published." ;;
+            *) echo "::error::Release $LAUNCH_TAG not found."; exit 1 ;;
+          esac
