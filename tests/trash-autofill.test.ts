@@ -16,13 +16,15 @@ test('older vaults without a trash still load', () => {
 })
 
 test('deleting moves a login to the trash and restoring brings it back unchanged', () => {
+  const restoredAt = new Date('2026-02-02T00:00:00.000Z')
   const deletedAt = new Date('2026-02-01T00:00:00.000Z')
   const trashed = moveToTrash(vault(login(A, 'Mail')), A, deletedAt)
   assert.equal(trashed.entries.length, 0)
   assert.equal(trashed.trash[0].deletedAt, deletedAt.toISOString())
   assert.ok(vaultSchema.safeParse(trashed).success)
-  const restored = restoreFromTrash(trashed, A)
-  assert.deepEqual(restored.entries, [login(A, 'Mail')])
+  const restored = restoreFromTrash(trashed, A, undefined, restoredAt)
+  // Only the change time moves, so the restore also wins on synced devices.
+  assert.deepEqual(restored.entries, [{ ...login(A, 'Mail'), modifiedAt: restoredAt.toISOString() }])
   assert.equal(restored.trash.length, 0)
 })
 

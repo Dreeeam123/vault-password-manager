@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
         registerPlugin(BackupFilePlugin.class);
+        registerPlugin(SyncFilePlugin.class);
         registerPlugin(AppIconPlugin.class);
         registerPlugin(SessionKeyPlugin.class);
         registerPlugin(SecureClipboardPlugin.class);

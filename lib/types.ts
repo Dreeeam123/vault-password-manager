@@ -43,6 +43,8 @@ export const vaultSchema = z.object({
   settings: settingsSchema,
   // Deleted logins stay recoverable for 30 days. Older vaults have no trash yet.
   trash: z.array(entrySchema.extend({ deletedAt: z.string().datetime() })).max(10000).default([]),
+  // Permanently deleted IDs, so sync does not bring them back from another device.
+  deleted: z.array(z.object({ id: z.string().uuid(), at: z.string().datetime() })).max(20000).default([]),
 })
 export type Entry = z.infer<typeof entrySchema>
 export type TrashedEntry = Entry & { deletedAt: string }
@@ -61,5 +63,5 @@ export function backupIsStale(data: VaultData) {
   const last = data.settings.lastBackupAt
   return !last || data.entries.some(entry => entry.modifiedAt > last)
 }
-export const emptyVault = (): VaultData => ({ version: 1, entries: [], settings: { ...DEFAULT_SETTINGS }, trash: [] })
+export const emptyVault = (): VaultData => ({ version: 1, entries: [], settings: { ...DEFAULT_SETTINGS }, trash: [], deleted: [] })
 export const messageOf = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong. Your saved vault has not been changed.'
