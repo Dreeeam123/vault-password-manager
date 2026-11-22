@@ -8,7 +8,7 @@ import { backupNotice, readBrowserBackup, saveEncryptedBackup } from '../lib/bac
 
 test('Backup import accepts octet-stream and missing MIME types, validating content instead', async () => {
   const salt = newSalt(), key = await deriveKey('test-only-master-password', salt)
-  const text = JSON.stringify(await encryptVault(emptyVault(), key, salt))
+  const text = JSON.stringify(await encryptVault(emptyVault(), key))
   for (const type of ['application/octet-stream', '', 'application/json']) {
     const selected = await readBrowserBackup(new File([text], 'my-backup.vault', { type }))
     assert.equal(selected.text, text)
@@ -96,7 +96,7 @@ test('Optional icon IDs preserve old entries and survive encrypted backup/restor
   const data = emptyVault()
   data.entries.push(entrySchema.parse({ ...entry, icon: 'steam' }))
   const salt = newSalt(), key = await deriveKey('test-only-master-password', salt)
-  const file = JSON.stringify(await encryptVault(data, key, salt))
+  const file = JSON.stringify(await encryptVault(data, key))
   assert.ok(!file.includes('steam'))
   const restored = await decryptVault(parseBackup(file), key)
   assert.equal(restored.entries[0].icon, 'steam')
@@ -117,7 +117,7 @@ test('The entire catalog is local, schema-safe and every brand has a sprite symb
 
 test('Browser export downloads a dated .vault file without invoking a share sheet', async () => {
   const salt = newSalt(), key = await deriveKey('Export regression password!', salt)
-  const encrypted = JSON.stringify(await encryptVault(emptyVault(), key, salt))
+  const encrypted = JSON.stringify(await encryptVault(emptyVault(), key))
   let clicked = false, removed = false
   let blob: Blob | undefined
   const anchor = { href: '', download: '', click() { clicked = true }, remove() { removed = true } }

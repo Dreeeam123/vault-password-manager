@@ -108,11 +108,18 @@ public class BackupFilePlugin extends Plugin {
         if (data.length() > 20_000_000) return false;
         try {
             org.json.JSONObject envelope = new org.json.JSONObject(data);
-            return envelope.length() == 8
-                && "vault".equals(envelope.getString("format"))
+            boolean argon2 = envelope.length() == 10
+                && envelope.getInt("version") == 2
+                && "Argon2id".equals(envelope.getString("kdf"))
+                && envelope.getInt("memory") == 65536
+                && envelope.getInt("iterations") == 3
+                && envelope.getInt("parallelism") == 4;
+            boolean legacy = envelope.length() == 8
                 && envelope.getInt("version") == 1
                 && "PBKDF2-SHA256".equals(envelope.getString("kdf"))
-                && envelope.getInt("iterations") == 600000
+                && envelope.getInt("iterations") == 600000;
+            return (argon2 || legacy)
+                && "vault".equals(envelope.getString("format"))
                 && "AES-256-GCM".equals(envelope.getString("cipher"))
                 && envelope.getString("salt").matches("[A-Za-z0-9+/]{22}==")
                 && envelope.getString("iv").matches("[A-Za-z0-9+/]{16}")

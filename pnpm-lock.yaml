@@ -44,6 +44,9 @@ importers:
       framer-motion:
         specifier: ^14.14.0
         version: 14.14.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      hash-wasm:
+        specifier: ^4.13.0
+        version: 4.13.0
       idb:
         specifier: ^8.0.4
         version: 8.0.4
@@ -1396,6 +1399,9 @@ packages:
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
     engines: {node: '>=8'}
+
+  hash-wasm@4.13.0:
+    resolution: {integrity: sha512-GrWl7wsV46fKIXQZB5ebskLZLAmKL6d9RS0fspCxDeQyjoNu1AfTJTMLPOJyfzaQm0ldFiwFN21/w+sE/kgEFQ==}
 
   human-signals@2.1.0:
     resolution: {integrity: sha512-B4FFZ6q/T2jhhksgkbEW3HBvWIfDW85snkQgawt07S7J5QXTk6BkNV+0yAeZrM5QpMAdYlocGoljn0sJ/WQkFw==}
@@ -3510,6 +3516,8 @@ snapshots:
   graceful-fs@4.2.12: {}
 
   has-flag@4.0.0: {}
+
+  hash-wasm@4.13.0: {}
 
   human-signals@2.1.0: {}
 

@@ -11,16 +11,16 @@ import { getHealth } from '../lib/health'
 
 const fixture = (): Entry => ({ id: crypto.randomUUID(), title: 'Private test account', username: 'private@example.test', password: 'a-test-secret-Never-Persist-Plain!', url: 'https://example.test', notes: 'sensitive test note', category: 'Personal', tags: ['test'], favorite: true, createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(), passwordChangedAt: new Date().toISOString() })
 
-test('PBKDF2 / AES-GCM round-trip, non-extractability, random IVs, and authentication', async () => {
+test('Argon2id / AES-GCM round-trip, non-extractability, random IVs, and authentication', async () => {
   const salt = newSalt()
   assert.equal(fromBase64(salt).length, 16)
   const key = await deriveKey('A sufficiently long test master!', salt)
   assert.equal(key.extractable, false)
   assert.deepEqual(key.algorithm, { name: 'AES-GCM', length: 256 })
   const data = emptyVault(); data.entries.push(fixture())
-  const encrypted = await encryptVault(data, key, salt)
-  const second = await encryptVault(data, key, salt)
-  assert.equal(encrypted.iterations, 600_000)
+  const encrypted = await encryptVault(data, key)
+  const second = await encryptVault(data, key)
+  assert.equal(encrypted.kdf, 'Argon2id')
   assert.equal(ITERATIONS, 600_000)
   assert.notEqual(encrypted.iv, second.iv)
   assert.notEqual(encrypted.ciphertext, second.ciphertext)
@@ -40,13 +40,13 @@ test('PBKDF2 / AES-GCM round-trip, non-extractability, random IVs, and authentic
 test('IndexedDB stores only ciphertext; conflicting writes, backups, delays, and wipe are atomic', async () => {
   const salt = newSalt(), key = await deriveKey('Test master password only!', salt)
   const original = emptyVault(); original.entries.push(fixture())
-  const envelope = await encryptVault(original, key, salt)
+  const envelope = await encryptVault(original, key)
   const record = await commitRecord(envelope, null)
   assert.deepEqual((await getRecord())?.envelope, envelope)
   await assert.rejects(commitRecord(envelope, null), /another tab/)
   const backup = parseBackup(JSON.stringify(envelope))
   assert.deepEqual(await decryptVault(backup, key), original)
-  const candidates = await Promise.allSettled([commitRecord(await encryptVault(original, key, salt), record.revision), commitRecord(await encryptVault(original, key, salt), record.revision)])
+  const candidates = await Promise.allSettled([commitRecord(await encryptVault(original, key), record.revision), commitRecord(await encryptVault(original, key), record.revision)])
   assert.equal(candidates.filter(result => result.status === 'fulfilled').length, 1)
   await assert.rejects(wipeRecord(record.revision), /another tab/)
   await failAttempt()
@@ -61,13 +61,13 @@ test('IndexedDB stores only ciphertext; conflicting writes, backups, delays, and
 test('Oversized UTF-8 vaults, failed writes, invalid imports and concurrent edits preserve committed entries', async () => {
   const salt = newSalt(), key = await deriveKey('Data loss regression master!', salt)
   const original = emptyVault(); original.entries.push(fixture())
-  const record = await commitRecord(await encryptVault(original, key, salt), null)
+  const record = await commitRecord(await encryptVault(original, key), null)
   const huge = emptyVault()
   huge.entries = Array.from({ length: 260 }, () => ({ ...fixture(), notes: '漢'.repeat(20000) }))
-  await assert.rejects(encryptVault(huge, key, salt), /size limit/)
+  await assert.rejects(encryptVault(huge, key), /size limit/)
   assert.deepEqual(await getRecord(), record)
   const next = structuredClone(original); next.entries.push(fixture())
-  const nextEnvelope = await encryptVault(next, key, salt)
+  const nextEnvelope = await encryptVault(next, key)
   const originalPut = IDBObjectStore.prototype.put
   IDBObjectStore.prototype.put = function (...args) {
     const request = originalPut.apply(this, args)
@@ -105,7 +105,7 @@ test('New vaults use Mono while saved and legacy appearances survive encrypted b
   const data = emptyVault(); data.settings.appearance = 'glass'
   data.entries.push({ ...fixture(), category: 'Snapchat' }, { ...fixture(), category: 'Discord' }, { ...fixture(), category: 'Instagram' })
   const salt = newSalt(), key = await deriveKey('Category compatibility master!', salt)
-  assert.deepEqual(await decryptVault(parseBackup(JSON.stringify(await encryptVault(data, key, salt))), key), data)
+  assert.deepEqual(await decryptVault(parseBackup(JSON.stringify(await encryptVault(data, key))), key), data)
 })
 
 test('Generator enforces selected character sets and passphrase bounds', () => {
@@ -136,4 +136,26 @@ test('Health detects reuse, weak passwords, and password age independently of en
   assert.equal(result.score, 0)
   assert.equal(getHealth([fixture()]).score, 100)
   assert.equal(getHealth([]).score, 0)
+})
+
+test('Argon2id is the default and legacy PBKDF2 vaults still open', async () => {
+  const { ARGON2 } = await import('../lib/crypto')
+  const data = emptyVault()
+  const salt = newSalt(), key = await deriveKey('Argon2id default master!', salt)
+  const envelope = await encryptVault(data, key)
+  assert.equal(envelope.version, 2)
+  assert.equal(envelope.kdf, 'Argon2id')
+  assert.deepEqual(envelope.version === 2 && { memory: envelope.memory, iterations: envelope.iterations, parallelism: envelope.parallelism }, ARGON2)
+  assert.deepEqual(await decryptVault(parseBackup(JSON.stringify(envelope)), await deriveKey('Argon2id default master!', salt)), data)
+  await assert.rejects(decryptVault(envelope, await deriveKey('Wrong Argon2id master!!', salt)), /Incorrect master password/)
+
+  const legacySalt = newSalt(), legacyKey = await deriveKey('Legacy PBKDF2 master!!', legacySalt, false, 'PBKDF2-SHA256')
+  const legacy = await encryptVault(data, legacyKey)
+  assert.equal(legacy.version, 1)
+  const reopened = await deriveKey('Legacy PBKDF2 master!!', legacySalt, false, 'PBKDF2-SHA256')
+  assert.deepEqual(await decryptVault(parseBackup(JSON.stringify(legacy)), reopened), data)
+  assert.equal((await encryptVault(data, reopened)).version, 1)
+
+  assert.throws(() => parseBackup(JSON.stringify({ ...envelope, memory: 8 })), /not a supported/)
+  assert.throws(() => parseBackup(JSON.stringify({ ...envelope, version: 1 })), /not a supported/)
 })
