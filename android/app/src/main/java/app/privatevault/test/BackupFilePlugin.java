@@ -16,7 +16,7 @@ import java.nio.charset.StandardCharsets;
 @CapacitorPlugin(name = "BackupFile")
 public class BackupFilePlugin extends Plugin {
     /** True while a system document picker launched from here is on top of the app. */
-    private static volatile boolean pickerOpen = false;
+    static volatile boolean pickerOpen = false;
 
     static boolean isPickerOpen() {
         return pickerOpen;

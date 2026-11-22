@@ -1,8 +1,9 @@
-const { app, BrowserWindow, protocol, net, shell, session, Menu, dialog } = require('electron')
-const { join, extname } = require('node:path')
+const { app, BrowserWindow, protocol, net, shell, session, Menu, dialog, ipcMain } = require('electron')
+const { join, extname, basename } = require('node:path')
 const { isRendererUrl, rendererPath, isExternalUrl } = require('./security.cjs')
 const { pathToFileURL } = require('node:url')
 const { existsSync } = require('node:fs')
+const { readFile, writeFile, rename, stat, rm } = require('node:fs/promises')
 
 const SCHEME = 'vault'
 const ORIGIN = `${SCHEME}://app`
@@ -107,6 +108,60 @@ function createWindow() {
   return window
 }
 
+const SYNC_LIMIT = 20_000_000
+const syncConfig = () => join(app.getPath('userData'), 'sync.json')
+async function syncPath() {
+  try { return JSON.parse(await readFile(syncConfig(), 'utf8')).path || null } catch { return null }
+}
+function isEnvelope(text) {
+  if (typeof text !== 'string' || text.length > SYNC_LIMIT) return false
+  try {
+    const value = JSON.parse(text)
+    return value && value.format === 'vault' && value.cipher === 'AES-256-GCM' && typeof value.ciphertext === 'string'
+  } catch { return false }
+}
+function registerSyncFile() {
+  const handle = (channel, listener) => ipcMain.handle(channel, (event, ...args) => {
+    if (!event.senderFrame || !isRendererUrl(event.senderFrame.url)) throw new Error('Blocked')
+    return listener(event, ...args)
+  })
+  handle('sync:status', async () => {
+    const path = await syncPath()
+    return { name: path ? basename(path) : null }
+  })
+  handle('sync:choose', async (event, create) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const filters = [{ name: 'Vault sync file', extensions: ['vault'] }]
+    const result = create
+      ? await dialog.showSaveDialog(window, { title: 'Create sync file', defaultPath: 'vault-sync.vault', filters, buttonLabel: 'Create' })
+      : await dialog.showOpenDialog(window, { title: 'Choose existing sync file', properties: ['openFile'], filters })
+    const path = create ? result.filePath : result.filePaths && result.filePaths[0]
+    if (result.canceled || !path) return { cancelled: true }
+    await writeFile(syncConfig(), JSON.stringify({ path }), 'utf8')
+    return { cancelled: false, name: basename(path) }
+  })
+  handle('sync:read', async () => {
+    const path = await syncPath()
+    if (!path) throw new Error('No sync file chosen.')
+    try {
+      if ((await stat(path)).size > SYNC_LIMIT) throw new Error('The sync file is larger than 20 MB.')
+      return { text: await readFile(path, 'utf8') }
+    } catch (error) {
+      if (error && error.code === 'ENOENT') return { text: null }
+      throw error
+    }
+  })
+  handle('sync:write', async (_event, data) => {
+    const path = await syncPath()
+    if (!path || !isEnvelope(data)) throw new Error('Only an encrypted vault can be written to the sync file.')
+    // Write next to the file and swap it in, so a sync client never uploads a half-written vault.
+    const temporary = `${path}.${process.pid}.tmp`
+    await writeFile(temporary, data, 'utf8')
+    try { await rename(temporary, path) } catch (error) { await rm(temporary, { force: true }); throw error }
+  })
+  handle('sync:clear', async () => { await rm(syncConfig(), { force: true }) })
+}
+
 app.on('second-instance', () => {
   const [window] = BrowserWindow.getAllWindows()
   if (!window) return
@@ -118,6 +173,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
   hardenSession()
   registerRendererProtocol()
+  registerSyncFile()
   createWindow()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })

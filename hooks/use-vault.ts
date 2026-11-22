@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import useSWR, { mutate as mutateCache } from 'swr'
 import { toast } from 'sonner'
-import { CURRENT_KDF, deriveKey, decryptVault, encryptVault, newSalt, type Kdf } from '@/lib/crypto'
+import { CURRENT_KDF, deriveKey, decryptVault, encryptVault, envelopeSchema, newSalt, type Envelope, type Kdf } from '@/lib/crypto'
 import { assertAttemptAllowed, commitRecord, failAttempt, getLook, getRecord, resetAttempts, saveLook, wipeRecord, type VaultRecord } from '@/lib/db'
 import { emptyVault, messageOf, type Appearance, type VaultData, type Entry, type Settings } from '@/lib/types'
 import { cacheLook, LOOK_KEY } from '@/lib/look'
@@ -16,6 +16,8 @@ import { forgetSession, loadSession, rememberSession, touchSession } from '@/lib
 import { applySystemBars, hapticError, hapticImpact, hapticSuccess } from '@/lib/native'
 import { parseImportBackup } from '@/lib/transfer'
 import { deleteForever as purgeOne, emptyTrash as purgeAll, moveToTrash, purgeExpired, restoreFromTrash } from '@/lib/trash'
+import { mergeVaults, sameContent } from '@/lib/sync'
+import { chooseSyncFile, forgetSyncFile, readSyncFile, SYNC_KEY, syncFileName, SyncPasswordNeeded, syncSupported, writeSyncFile } from '@/lib/sync-file'
 import { BIOMETRIC_KEY, disableBiometric, enableBiometric, unlockWithBiometric } from '@/lib/biometric'
 
 type Session = { key: CryptoKey; record: VaultRecord; data: VaultData }
@@ -40,6 +42,12 @@ export function useVault() {
   // File pickers and share sheets hide the page without the user leaving the app.
   // While one is open (and for a short grace period afterwards) background locking is paused.
   // The inactivity deadline still applies, including while a picker is open.
+  const syncRun = useRef<Promise<unknown> | null>(null)
+  const syncTimer = useRef<number | undefined>(undefined)
+  const [syncStatus, setSyncStatus] = useState<{ at: number | null; error: string | null; needsPassword: boolean }>({ at: null, error: null, needsPassword: false })
+  const { data: syncName, mutate: refreshSyncName } = useSWR(syncSupported() ? SYNC_KEY : null, syncFileName, { revalidateOnFocus: false, revalidateOnReconnect: false, shouldRetryOnError: false })
+  const syncEnabled = useRef(false)
+  syncEnabled.current = Boolean(syncName)
   const fileDialogs = useRef(0)
   const fileDialogGraceUntil = useRef(0)
   const lockPolicy = useRef<{ lockOnLeave: Settings['lockOnLeave']; autoLock: number }>({ lockOnLeave: 'immediately', autoLock: 5 })
@@ -52,6 +60,7 @@ export function useVault() {
     setLockVersion(epoch.current)
     if (session.current) void hapticImpact()
     session.current = null
+    clearTimeout(syncTimer.current)
     rememberedKey.current = null
     setData(null)
     pendingLook.current = null
@@ -208,6 +217,8 @@ export function useVault() {
   async function run<T>(operation: (generation: number) => Promise<T>, quiet = false) {
     // An appearance save takes a moment; let it finish instead of rejecting the user's action.
     if (!quiet && lookSave.current) await lookSave.current
+    // A background sync is short; wait for it instead of rejecting what the user just did.
+    if (!quiet && syncRun.current) await syncRun.current.catch(() => undefined)
     if (inFlight.current) throw new Error('Please wait for the current operation to finish.')
     inFlight.current = true; if (!quiet) setBusy(true)
     let release!: () => void
@@ -304,6 +315,7 @@ export function useVault() {
     session.current = { ...decoded, record }; setData(decoded.data)
     await mutate(record, false)
     void remember()
+    scheduleSync(300)
   }
   async function update(transform: (current: VaultData) => VaultData, quiet = false) {
     return run(async generation => {
@@ -314,7 +326,72 @@ export function useVault() {
       assertActive(generation)
       const record = await commitRecord(envelope, active.record.revision)
       await accept({ ...active, data: nextData, record }, generation)
+      scheduleSync()
     }, quiet)
+  }
+  async function performSync(generation: number, password?: string) {
+    const active = session.current
+    if (!active) throw new Error('Unlock your vault first.')
+    const text = await readSyncFile()
+    let remote: VaultData | null = null, key = active.key, rekeyed = false, upgraded = false
+    if (text) {
+      let envelope: Envelope
+      try { envelope = envelopeSchema.parse(JSON.parse(text)) } catch { throw new Error('The sync file is not a Vault file. Choose another file.') }
+      const local = active.record.envelope
+      if (envelope.salt === local.salt && envelope.kdf === local.kdf) {
+        try { remote = await decryptVault(envelope, active.key) } catch { throw new Error('The sync file could not be decrypted. It may be damaged.') }
+      } else {
+        // Another device created the file or changed the master password: prove you know it once,
+        // then this device adopts that key so later syncs run without asking.
+        if (!password) throw new SyncPasswordNeeded()
+        const result = await authenticate(password, { ...active.record, envelope })
+        remote = result.data; key = result.key; upgraded = result.upgraded; rekeyed = true
+      }
+    }
+    const merged = purgeExpired(remote ? mergeVaults(active.data, remote) : active.data)
+    assertActive(generation)
+    if (rekeyed || !sameContent(merged, active.data)) {
+      const record = await commitRecord(await encryptVault(merged, key), active.record.revision)
+      if (rekeyed) await resetBiometric()
+      await accept({ key, data: merged, record }, generation)
+    }
+    if (!remote || upgraded || !sameContent(merged, remote)) await writeSyncFile(JSON.stringify(await encryptVault(merged, key)))
+    setSyncStatus({ at: Date.now(), error: null, needsPassword: false })
+    return { rekeyed }
+  }
+  function startSync(password?: string, quiet = true) {
+    const task = run(generation => performSync(generation, password), quiet)
+    syncRun.current = task
+    void task.catch(error => {
+      if (!session.current) return
+      setSyncStatus(current => ({ ...current, error: messageOf(error), needsPassword: error instanceof SyncPasswordNeeded }))
+    }).finally(() => { if (syncRun.current === task) syncRun.current = null })
+    return task
+  }
+  function scheduleSync(delay = 1500) {
+    if (!syncEnabled.current) return
+    clearTimeout(syncTimer.current)
+    syncTimer.current = window.setTimeout(() => {
+      if (!session.current) return
+      if (inFlight.current) { scheduleSync(delay); return }
+      void startSync().catch(() => undefined)
+    }, delay)
+  }
+  async function chooseSync(create: boolean) {
+    const resume = pauseLock()
+    let result
+    try { result = await chooseSyncFile(create) } finally { resume() }
+    if (result.cancelled) return false
+    await refreshSyncName(result.name ?? null, false)
+    syncEnabled.current = true
+    setSyncStatus({ at: null, error: null, needsPassword: false })
+    return true
+  }
+  async function stopSync() {
+    clearTimeout(syncTimer.current)
+    await forgetSyncFile()
+    await refreshSyncName(null, false)
+    setSyncStatus({ at: null, error: null, needsPassword: false })
   }
   function setLook(patch: Partial<Look>) {
     if (!session.current) return
@@ -428,6 +505,12 @@ export function useVault() {
     }
     return result
   }
+  useEffect(() => {
+    if (!data) return
+    const onVisible = () => { if (!document.hidden) scheduleSync(500) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [Boolean(data)])
   async function wipe() {
     return run(async () => {
       const active = session.current
@@ -439,6 +522,6 @@ export function useVault() {
       toast.success('Local vault erased.')
     })
   }
-  return { data: view, busy, lockVersion, isLoading: isLoading || (restoring && !storageError), storageError, hasVault: Boolean(stored), create, unlock, unlockBiometric, setBiometric, lock: () => lock(), pauseLock, saveEntry, deleteEntry, restoreEntry, deleteForever, emptyTrash, setSettings, setLook, changePassword, verifyPassword, restore, exportBackup, wipe }
+  return { data: view, busy, lockVersion, isLoading: isLoading || (restoring && !storageError), storageError, hasVault: Boolean(stored), create, unlock, unlockBiometric, setBiometric, lock: () => lock(), pauseLock, saveEntry, deleteEntry, restoreEntry, deleteForever, emptyTrash, setSettings, setLook, changePassword, verifyPassword, restore, exportBackup, wipe, sync: { supported: syncSupported(), fileName: syncName ?? null, ...syncStatus, choose: chooseSync, now: (password?: string) => startSync(password, false), stop: stopSync } }
 }
 export type VaultController = ReturnType<typeof useVault>
