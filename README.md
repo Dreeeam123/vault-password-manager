@@ -1,6 +1,6 @@
 # VAULT – Password Manager
 
-A free, fully local password manager for Windows and Android, built with Next.js static export, IndexedDB (`idb`), and Web Crypto. No backend, account, cloud sync, analytics, remote fonts, or runtime external requests.
+A free, fully local password manager for Windows and Android, built with Next.js static export, IndexedDB (`idb`), and Web Crypto. No backend, account, analytics, remote fonts, or runtime external requests. Sync between devices is optional and works through a folder you choose.
 
 Website: [tryvault.download](https://tryvault.download)  
 Support: [support@tryvault.download](mailto:support@tryvault.download)
@@ -17,7 +17,8 @@ Support: [support@tryvault.download](mailto:support@tryvault.download)
 - **Fingerprint unlock (Android)** – unlock with a touch; the session key is wrapped by the Android Keystore.
 - **Autofill (Android)** – VAULT suggests the matching login when an app asks for one, so there is no copy and paste.
 - **Encrypted backups** – export a password-protected `.vault` file and restore it on any device.
-- **100% local** – no account, no cloud sync, no server, no analytics. Your vault stays encrypted on your device and works fully offline.
+- **Encrypted sync (optional)** – pick a folder you already sync (OneDrive, Google Drive, Dropbox, Syncthing, …) and VAULT keeps an encrypted sync file there. Changes from your PC and phone are merged automatically while the vault is unlocked. The sync service only sees encrypted data.
+- **Local first** – no account, no VAULT server, no analytics. Your vault stays encrypted on your device and works fully offline.
 - **Open source** – the complete source is public under GPL-3.0, so anyone can review it.
 - **Nine themes** – Classic, Liquid Glass, Gradient, Midnight, Ocean, Forest, Rose, Amber and Mono, each with a matching app icon.
 - **Light and dark mode** – every theme has a light and a dark variant.
