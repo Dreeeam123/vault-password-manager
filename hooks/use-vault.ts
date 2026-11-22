@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import useSWR, { mutate as mutateCache } from 'swr'
 import { toast } from 'sonner'
-import { deriveKey, decryptVault, encryptVault, newSalt } from '@/lib/crypto'
+import { CURRENT_KDF, deriveKey, decryptVault, encryptVault, newSalt, type Kdf } from '@/lib/crypto'
 import { assertAttemptAllowed, commitRecord, failAttempt, getLook, getRecord, resetAttempts, saveLook, wipeRecord, type VaultRecord } from '@/lib/db'
 import { emptyVault, messageOf, type Appearance, type VaultData, type Entry, type Settings } from '@/lib/types'
 import { cacheLook, LOOK_KEY } from '@/lib/look'
@@ -227,15 +227,17 @@ export function useVault() {
     channel.current?.postMessage('changed')
     if (live && generation === epoch.current) void remember()
   }
-  const derive = (password: string, salt: string) => deriveKey(password, salt, Capacitor.isNativePlatform())
+  const derive = (password: string, salt: string, kdf?: Kdf) => deriveKey(password, salt, Capacitor.isNativePlatform(), kdf)
   async function authenticate(password: string, record: VaultRecord) {
     await assertAttemptAllowed()
     try {
-      const key = await derive(password, record.envelope.salt)
+      const key = await derive(password, record.envelope.salt, record.envelope.kdf)
       const decoded = await decryptVault(record.envelope, key)
       await resetAttempts()
       void hapticSuccess()
-      return { key, data: decoded }
+      // Vaults and backups from before Argon2id get a fresh salt and an Argon2id key; callers re-encrypt with it.
+      if (record.envelope.kdf !== CURRENT_KDF) return { key: await derive(password, newSalt()), data: decoded, upgraded: true }
+      return { key, data: decoded, upgraded: false }
     } catch {
       void hapticError()
       const delay = await failAttempt()
@@ -246,7 +248,7 @@ export function useVault() {
     return run(async generation => {
       if (password.length < 12) throw new Error('Use at least 12 characters for your master password.')
       const salt = newSalt(), key = await derive(password, salt), initial = emptyVault()
-      const envelope = await encryptVault(initial, key, salt)
+      const envelope = await encryptVault(initial, key)
       assertActive(generation)
       const record = await commitRecord(envelope, null)
       await resetBiometric()
@@ -258,7 +260,15 @@ export function useVault() {
     return run(async generation => {
       const record = await getRecord()
       if (!record) { await mutate(); throw new Error('No local vault found. Create or restore one.') }
-      await open(await authenticate(password, record), record, generation)
+      const { key, data, upgraded } = await authenticate(password, record)
+      let current = record
+      if (upgraded) {
+        const envelope = await encryptVault(data, key)
+        assertActive(generation)
+        current = await commitRecord(envelope, record.revision)
+        await resetBiometric()
+      }
+      await open({ key, data }, current, generation)
     })
   }
   async function unlockBiometric() {
@@ -285,7 +295,7 @@ export function useVault() {
     const receipt = pendingBackup.current
     if (receipt?.revision === record.revision) {
       decoded.data.settings.lastBackupAt = receipt.at
-      const envelope = await encryptVault(decoded.data, decoded.key, record.envelope.salt)
+      const envelope = await encryptVault(decoded.data, decoded.key)
       assertActive(generation)
       record = await commitRecord(envelope, record.revision)
     }
@@ -300,7 +310,7 @@ export function useVault() {
       const active = session.current
       if (!active) throw new Error('Unlock your vault first.')
       const nextData = purgeExpired(transform(active.data))
-      const envelope = await encryptVault(nextData, active.key, active.record.envelope.salt)
+      const envelope = await encryptVault(nextData, active.key)
       assertActive(generation)
       const record = await commitRecord(envelope, active.record.revision)
       await accept({ ...active, data: nextData, record }, generation)
@@ -356,7 +366,7 @@ export function useVault() {
       if (nextPassword.length < 12) throw new Error('Use at least 12 characters.')
       await authenticate(currentPassword, active.record)
       const salt = newSalt(), key = await derive(nextPassword, salt)
-      const envelope = await encryptVault(active.data, key, salt)
+      const envelope = await encryptVault(active.data, key)
       assertActive(generation)
       const record = await commitRecord(envelope, active.record.revision)
       await resetBiometric()
@@ -368,17 +378,16 @@ export function useVault() {
       const previous = await getRecord()
       const backup = parseImportBackup(text)
       if (backup.protection === 'none' && (password.length < 12 || password.length > 1024)) throw new Error('Choose a new master password with 12–1024 characters to protect this device.')
-      const salt = backup.protection === 'password' ? backup.envelope.salt : newSalt()
       const decoded = backup.protection === 'password'
         ? await authenticate(password, { revision: '', envelope: backup.envelope })
-        : { data: backup.data, key: await derive(password, salt) }
+        : { data: backup.data, key: await derive(password, newSalt()) }
       // Re-encrypt to get a fresh IV even when restoring an existing ciphertext.
       // Unprotected imports are never written to the device without encryption.
-      const fresh = await encryptVault(decoded.data, decoded.key, salt)
+      const fresh = await encryptVault(decoded.data, decoded.key)
       assertActive(generation)
       const record = await commitRecord(fresh, previous?.revision ?? null)
       await resetBiometric()
-      await accept({ ...decoded, record }, generation)
+      await accept({ key: decoded.key, data: decoded.data, record }, generation)
     })
   }
   async function verifyPassword(password: string) {

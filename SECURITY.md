@@ -14,8 +14,8 @@ Fixes are released before details are made public, and reporters are credited un
 
 ## How VAULT protects your data
 
-- **Key derivation:** your master password is turned into a 256-bit key with PBKDF2-SHA256, 600,000 iterations and a random 128-bit salt per vault. The work factor is fixed and validated, so a hostile backup file cannot request a different one.
-- **Encryption:** the complete vault (entries and settings) is encrypted with AES-256-GCM. Every save uses a fresh random 96-bit IV and a 128-bit authentication tag. The format string `Vault:v1:PBKDF2-SHA256:600000:AES-256-GCM` is bound as additional authenticated data.
+- **Key derivation:** your master password is turned into a 256-bit key with Argon2id (64 MiB memory, 3 passes, 4 lanes, following RFC 9106) and a random 128-bit salt per vault. The work factor is fixed and validated, so a hostile backup file cannot request a different one. Vaults and backups created before version 1.4.5 used PBKDF2-SHA256 with 600,000 iterations; they still open and are re-encrypted with a fresh salt and an Argon2id key the next time you unlock with your master password.
+- **Encryption:** the complete vault (entries and settings) is encrypted with AES-256-GCM. Every save uses a fresh random 96-bit IV and a 128-bit authentication tag. The format string `Vault:v2:Argon2id:m=65536,t=3,p=4:AES-256-GCM` is bound as additional authenticated data.
 - **Key handling:** on Windows and the web the key is a non-extractable Web Crypto key held only in memory and discarded on lock, inactivity or backgrounding. On Android, an optional remembered session wraps the key with an AES-256-GCM key in the Android Keystore (hardware-backed where available); it is never stored next to the ciphertext.
 - **Storage:** only the encrypted envelope, a revision ID and unlock-delay counters are stored locally in IndexedDB. The app makes no network requests at runtime.
 - **No network access:** a Content Security Policy (`connect-src 'self'`) only lets the app load its own bundled files, and the Android app does not request the INTERNET permission, so the system itself blocks outgoing connections.

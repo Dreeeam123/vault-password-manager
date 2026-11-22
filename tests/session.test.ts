@@ -8,7 +8,7 @@ import { forgetSession, loadSession, rememberSession, touchSession } from '../li
 
 test('Web/desktop remove legacy saved keys without changing the encrypted vault', async () => {
   const salt = newSalt(), key = await deriveKey('Remembered session master pw!', salt)
-  const record = await commitRecord(await encryptVault(emptyVault(), key, salt), null)
+  const record = await commitRecord(await encryptVault(emptyVault(), key), null)
   await putStoredSession({ key, expiresAt: null })
   assert.ok(await getStoredSession())
   assert.equal(await loadSession(), null, 'never automatically use a legacy unwrapped key')

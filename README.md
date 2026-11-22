@@ -5,7 +5,7 @@ A free, fully local password manager for Windows and Android, built with Next.js
 Website: [tryvault.download](https://tryvault.download)  
 Support: [support@tryvault.download](mailto:support@tryvault.download)
 
-> **Status: not independently audited.** VAULT uses well-established primitives (PBKDF2-SHA256 + AES-256-GCM via Web Crypto), but no outside firm has reviewed this code yet. The source is published so anyone can check it. Read [SECURITY.md](./SECURITY.md) and the security model below before trusting it with important data. Reviews and issue reports are very welcome.
+> **Status: not independently audited.** VAULT uses well-established primitives (Argon2id + AES-256-GCM), but no outside firm has reviewed this code yet. The source is published so anyone can check it. Read [SECURITY.md](./SECURITY.md) and the security model below before trusting it with important data. Reviews and issue reports are very welcome.
 
 <p align="center">
   <img src="docs/screenshots/windows/vault.png" alt="VAULT on Windows showing the vault with saved logins" width="860">
@@ -102,7 +102,7 @@ Native provisions include pause-to-lock, native clipboard writes, `FLAG_SECURE` 
 
 ## Security model and limitations
 
-- PBKDF2-SHA256: 600,000 iterations, random 128-bit per-vault salt; non-extractable AES-256-GCM key kept only in memory. Every save gets a new random 96-bit IV and 128-bit authentication tag; fixed format metadata is authenticated as AAD.
+- Argon2id (64 MiB memory, 3 passes, 4 lanes, per RFC 9106), random 128-bit per-vault salt. Vaults and backups from older versions (PBKDF2-SHA256, 600,000 iterations) still open and are upgraded to Argon2id on the next master-password unlock; non-extractable AES-256-GCM key kept only in memory. Every save gets a new random 96-bit IV and 128-bit authentication tag; fixed format metadata is authenticated as AAD.
 - The complete entries/settings payload is encrypted. Only the envelope, a revision UUID, and unlock failure counters/deadline are persisted in IndexedDB. No localStorage is used.
 - Atomic revision checks prevent multi-tab overwrites. BroadcastChannel locks sibling tabs on changes. Backgrounding and inactivity discard key/decrypted state and unmount sensitive forms. In-flight encryption cannot restore a locked session.
 - Persisted exponential unlock delays cap at 5 minutes. These deter casual attempts, not an attacker controlling IndexedDB or cracking an exported file offline. Use a strong, unique master password.
