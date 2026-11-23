@@ -26,12 +26,13 @@ export function withPasswordHistory(previous: Entry | undefined, next: Entry, no
 }
 export const APPEARANCES = ['classic', 'glass', 'gradient', 'midnight', 'forest', 'rose', 'mono', 'ocean', 'amber'] as const
 export const AUTO_LOCK_OPTIONS = [1, 5, 15, 0] as const
-export const CLIPBOARD_OPTIONS = [15, 30, 60, 0] as const
+export const CLIPBOARD_OPTIONS = [15, 30, 60] as const
 export const LOCK_ON_LEAVE_OPTIONS = ['immediately', 'auto-lock', 'never'] as const
 // 0 means "never" for both timers. Older vaults only contain 1/5/15 and 15/30/60.
 export const settingsSchema = z.object({
   autoLock: z.union([z.literal(1), z.literal(5), z.literal(15), z.literal(0)]),
-  clipboardTimeout: z.union([z.literal(15), z.literal(30), z.literal(60), z.literal(0)]),
+  // 0 meant "never clear" before 1.6; older vaults are upgraded to the longest timer.
+  clipboardTimeout: z.union([z.literal(15), z.literal(30), z.literal(60), z.literal(0).transform(() => 60 as const)]),
   lockOnLeave: z.enum(LOCK_ON_LEAVE_OPTIONS).default('immediately'),
   theme: z.enum(['dark', 'light', 'system']),
   appearance: z.enum(APPEARANCES).default('classic'),

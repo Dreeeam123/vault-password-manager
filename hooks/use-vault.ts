@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { CURRENT_KDF, deriveKey, decryptVault, encryptVault, envelopeSchema, newSalt, type Envelope, type Kdf } from '@/lib/crypto'
 import { assertAttemptAllowed, commitRecord, failAttempt, getLook, getRecord, resetAttempts, saveLook, wipeRecord, type VaultRecord } from '@/lib/db'
 import { emptyVault, messageOf, type Appearance, type VaultData, type Entry, type Settings } from '@/lib/types'
+import { masterPasswordProblem } from '@/lib/generator'
 import { cacheLook, LOOK_KEY } from '@/lib/look'
 import { clearClipboard, retryClipboardClear } from '@/lib/clipboard'
 import { Capacitor } from '@capacitor/core'
@@ -257,7 +258,7 @@ export function useVault() {
   }
   async function create(password: string) {
     return run(async generation => {
-      if (password.length < 12) throw new Error('Use at least 12 characters for your master password.')
+      const problem = masterPasswordProblem(password); if (problem) throw new Error(problem)
       const salt = newSalt(), key = await derive(password, salt), initial = emptyVault()
       const envelope = await encryptVault(initial, key)
       assertActive(generation)
@@ -440,7 +441,7 @@ export function useVault() {
     return run(async generation => {
       const active = session.current
       if (!active) throw new Error('Unlock your vault first.')
-      if (nextPassword.length < 12) throw new Error('Use at least 12 characters.')
+      const problem = masterPasswordProblem(nextPassword); if (problem) throw new Error(problem)
       await authenticate(currentPassword, active.record)
       const salt = newSalt(), key = await derive(nextPassword, salt)
       const envelope = await encryptVault(active.data, key)
@@ -454,7 +455,7 @@ export function useVault() {
     return run(async generation => {
       const previous = await getRecord()
       const backup = parseImportBackup(text)
-      if (backup.protection === 'none' && (password.length < 12 || password.length > 1024)) throw new Error('Choose a new master password with 12–1024 characters to protect this device.')
+      if (backup.protection === 'none') { const problem = masterPasswordProblem(password); if (problem) throw new Error(problem) }
       const decoded = backup.protection === 'password'
         ? await authenticate(password, { revision: '', envelope: backup.envelope })
         : { data: backup.data, key: await derive(password, newSalt()) }
