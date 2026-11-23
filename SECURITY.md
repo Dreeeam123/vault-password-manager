@@ -27,9 +27,9 @@ Implementation: [`lib/crypto.ts`](./lib/crypto.ts), [`lib/session.ts`](./lib/ses
 ## What VAULT does not protect against
 
 - Malware, keyloggers, malicious browser extensions, or anyone with control of your unlocked device.
-- Weak master passwords. Exported backups can be attacked offline; the unlock delay only slows attempts inside the app.
+- Weak master passwords. VAULT rejects master passwords that are shorter than 12 characters or easy to guess (common words, repeats, simple patterns), but no check can guarantee a password is unguessable. Exported backups can be attacked offline; the unlock delay only slows attempts inside the app.
 - Memory forensics. JavaScript cannot guarantee that strings are wiped from memory.
-- Clipboard snooping. Clipboard clearing is best-effort and can fail if the app is suspended or killed.
+- Clipboard snooping. Copied secrets are always cleared after 15, 30 or 60 seconds and whenever the vault locks; there is no option to keep them. Clearing is still best-effort: if the operating system suspends or kills the app first, VAULT retries on the next resume and warns you when it cannot.
 - A forgotten master password. There is no recovery, by design.
 
 ## Supported versions

@@ -31,6 +31,13 @@ export function generatePassphrase(count = 10): string {
 }
 export const passphraseBits = (count: number) => Math.floor(Math.log2(WORDS.length) * count)
 
+export function masterPasswordProblem(password: string): string | null {
+  if (password.length < 12) return 'Use at least 12 characters for your master password.'
+  if (password.length > 1024) return 'Use at most 1024 characters for your master password.'
+  if (passwordStrength(password).score < 3) return 'This master password is too easy to guess. Avoid common words, repeats and patterns, or use a passphrase from the generator.'
+  return null
+}
+
 export function passwordStrength(password: string): { score: number; label: string } {
   if (!password) return { score: 0, label: 'Not set' }
   const unique = new Set(password.toLowerCase()).size

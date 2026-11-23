@@ -6,7 +6,7 @@ import { emptyVault, vaultSchema, type Entry } from '../lib/types'
 import { IDBObjectStore } from 'fake-indexeddb'
 import { openDB } from 'idb'
 import { getRecord, commitRecord, wipeRecord, failAttempt, assertAttemptAllowed, resetAttempts, getAttempts } from '../lib/db'
-import { DEFAULT_GENERATOR, generatePassword, generatePassphrase, passphraseBits, passwordStrength } from '../lib/generator'
+import { DEFAULT_GENERATOR, generatePassword, generatePassphrase, passphraseBits, passwordStrength, masterPasswordProblem } from '../lib/generator'
 import { getHealth } from '../lib/health'
 
 const fixture = (): Entry => ({ id: crypto.randomUUID(), title: 'Private test account', username: 'private@example.test', password: 'a-test-secret-Never-Persist-Plain!', url: 'https://example.test', notes: 'sensitive test note', category: 'Personal', tags: ['test'], favorite: true, createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(), passwordChangedAt: new Date().toISOString() })
@@ -100,7 +100,7 @@ test('New vaults use Mono while saved and legacy appearances survive encrypted b
   assert.equal(vaultSchema.parse(legacy).settings.appearance, 'classic')
   assert.equal(vaultSchema.parse(legacy).settings.lockOnLeave, 'immediately')
   const relaxed = { ...emptyVault(), settings: { autoLock: 0, clipboardTimeout: 0, lockOnLeave: 'never', theme: 'system', appearance: 'midnight' } }
-  assert.deepEqual(vaultSchema.parse(relaxed).settings, { ...relaxed.settings, lastBackupAt: null })
+  assert.deepEqual(vaultSchema.parse(relaxed).settings, { ...relaxed.settings, clipboardTimeout: 60, lastBackupAt: null })
   assert.throws(() => vaultSchema.parse({ ...emptyVault(), settings: { ...emptyVault().settings, autoLock: 2 } }))
   const data = emptyVault(); data.settings.appearance = 'glass'
   data.entries.push({ ...fixture(), category: 'Snapchat' }, { ...fixture(), category: 'Discord' }, { ...fixture(), category: 'Instagram' })
@@ -123,6 +123,12 @@ test('Generator enforces selected character sets and passphrase bounds', () => {
   assert.equal(generatePassphrase(10).split('-').length, 10)
   assert.ok(passphraseBits(10) >= 70)
   assert.equal(passwordStrength('password123456789012345').score, 1)
+  assert.match(masterPasswordProblem('short') ?? '', /12 characters/)
+  assert.ok(masterPasswordProblem('aaaaaaaaaaaaaaaa'))
+  assert.ok(masterPasswordProblem('password12345678'))
+  assert.ok(masterPasswordProblem('121212121212'))
+  assert.equal(masterPasswordProblem('correct-horse-battery-staple'), null)
+  assert.equal(masterPasswordProblem('Tr0ub4dor&3xample'), null)
 })
 
 test('Health detects reuse, weak passwords, and password age independently of entry edits', () => {
