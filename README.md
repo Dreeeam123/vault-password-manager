@@ -1,9 +1,14 @@
 # VAULT – Password Manager
 
+[![Tests](https://github.com/Dreeeam123/vault-password-manager/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Dreeeam123/vault-password-manager/actions/workflows/tests.yml)
+[![CodeQL](https://github.com/Dreeeam123/vault-password-manager/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main)](https://github.com/Dreeeam123/vault-password-manager/security/code-scanning)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](./LICENSE)
+
 A free, fully local password manager for Windows and Android, built with Next.js static export, IndexedDB (`idb`), and Web Crypto. No backend, account, analytics, remote fonts, or runtime external requests. Sync between devices is optional and works through a folder you choose.
 
 Website: [tryvault.download](https://tryvault.download)  
 Support: [support@tryvault.download](mailto:support@tryvault.download)
+Tests: [`/tests`](./tests) covers encryption, backups, sync, the clipboard and password strength. Run them with `pnpm test`.
 
 > **Status: not independently audited.** VAULT uses well-established primitives (Argon2id + AES-256-GCM), but no outside firm has reviewed this code yet. The source is published so anyone can check it. Read [SECURITY.md](./SECURITY.md) and the security model below before trusting it with important data. Reviews and issue reports are very welcome.
 
